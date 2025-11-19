@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Block Blast Full Version</title>
+<style>
+  body { background:#1a1a1a; display:flex; justify-content:center; align-items:center; height:100vh; margin:0; font-family:sans-serif; }
+  #ui { position:absolute; top:20px; color:white; font-size:24px; }
+  canvas { background:#101010; border:5px solid #555; border-radius:10px; }
+</style>
+</head>
+<body>
+<div id="ui">คะแนน : <span id="score">0</span></div>
+<canvas id="game" width="420" height="600"></canvas>
+<script>
+// ========== CONFIG ==========
+const ROWS = 10;
+const COLS = 8;
+const CELL = 50;
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+let grid = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
+let score = 0;
+let holding = null;
+let pieces = [];
+
+// ชิ้น Block Blast ของจริง
+const SHAPES = [
+  [[1]],
+  [[1,1]],
+  [[1],[1]],
+  [[1,1,1]],
+  [[1],[1],[1]],
+  [[1,1],[1,1]],
+  [[1,1,1],[0,1,0]],
+  [[1,1,1],[1,0,0]],
+  [[1,1,1],[0,0,1]],
+  [[1,1,1,1]]
+];
+
+function newPiece(){
+  let shape = SHAPES[Math.floor(Math.random()*SHAPES.length)];
+  return { shape, x:0, y:0, w:shape[0].length, h:shape.length };
+}
+
+function generatePieces(){ pieces = [newPiece(), newPiece(), newPiece()]; }
+
+// ========== UTIL ==========
+function drawGrid(){
+  for(let r=0;r<ROWS;r++){
+    for(let c=0;c<COLS;c++){
+      ctx.fillStyle = grid[r][c] ? "#4caf50" : "#2a2a2a";
+      ctx.fillRect(c*CELL, r*CELL, CELL-2, CELL-2);
+    }
+  }
+}
+
+function drawPiece(piece, x, y){
+  ctx.fillStyle = "#ffca28";
+  for(let r=0;r<piece.h;r++){
+    for(let c=0;c<piece.w;c++){
+      if(piece.shape[r][c]){
+        ctx.fillRect(x + c*CELL, y + r*CELL, CELL-2, CELL-2);
+      }
+    }
+  }
+}
+
+function canPlace(piece, gx, gy){
+  for(let r=0;r<piece.h;r++){
+    for(let c=0;c<piece.w;c++){
+      if(piece.shape[r][c]){
+        let rr = gy+r;
+        let cc = gx+c;
+        if(rr<0||rr>=ROWS||cc<0||cc>=COLS) return false;
+        if(grid[rr][cc]) return false;
+      }
+    }
+  }
+  return true;
+}
+
+function place(piece, gx, gy){
+  for(let r=0;r<piece.h;r++){
+    for(let c=0;c<piece.w;c++){
+      if(piece.shape[r][c]){
+        grid[gy+r][gx+c] = 1;
+      }
+    }
+  }
+}
+
+function clearLines(){
+  let add = 0;
+
+  // Rows
+  for(let r=0;r<ROWS;r++){
+    if(grid[r].every(v=>v===1)){
+      grid[r].fill(0);
+      add += 10;
+    }
+  }
+
+  // Cols
+  for(let c=0;c<COLS;c++){
+    let full = true;
+    for(let r=0;r<ROWS;r++) if(!grid[r][c]) full=false;
+    if(full){
+      for(let r=0;r<ROWS;r++) grid[r][c] = 0;
+      add += 10;
+    }
+  }
+
+  score += add;
+  document.getElementById("score").innerText = score;
+}
+
+function checkGameOver(){
+  for(let p of pieces){
+    for(let r=0;r<ROWS;r++){
+      for(let c=0;c<COLS;c++){
+        if(canPlace(p, c, r)) return false;
+      }
+    }
+  }
+  return true;
+}
+
+// ========== MOUSE INPUT ==========
+let mx=0,my=0;
+canvas.addEventListener("mousemove", e=>{
+  const rect = canvas.getBoundingClientRect();
+  mx = e.clientX - rect.left;
+  my = e.clientY - rect.top;
+});
+
+canvas.addEventListener("mousedown", e=>{
+  if(holding) return;
+  for(let i=0;i<pieces.length;i++){
+    let px = 10;
+    let py = 520;
+    if(mx>px+i*120 && mx<px+i*120+100 && my>py && my<py+100){
+      holding = pieces[i];
+      pieces.splice(i,1);
+      break;
+    }
+  }
+});
+
+canvas.addEventListener("mouseup", e=>{
+  if(!holding) return;
+  let gx = Math.floor(mx / CELL);
+  let gy = Math.floor(my / CELL);
+
+  if(canPlace(holding, gx, gy)){
+    place(holding, gx, gy);
+    clearLines();
+    holding = null;
+    if(pieces.length === 0) generatePieces();
+    if(checkGameOver()) alert("Game Over");
+  } else {
+    pieces.push(holding);
+    holding = null;
+  }
+});
+
+// ========== LOOP ==========
+function loop(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  drawGrid();
+
+  // วาดชิ้นรอด้านล่าง
+  for(let i=0;i<pieces.length;i++){
+    drawPiece(pieces[i], 10 + i*120, 520);
+  }
+
+  // วาดชิ้นที่ลากอยู่
+  if(holding){
+    // snap preview
+    let gx = Math.floor(mx / CELL);
+    let gy = Math.floor(my / CELL);
+    let px = gx * CELL;
+    let py = gy * CELL;
+
+    // ถ้าวางได้ให้เป็นสีเขียวอ่อน ถ้าวางไม่ได้ให้เป็นสีแดง
+    if(canPlace(holding, gx, gy)){
+      ctx.globalAlpha = 0.6;
+      ctx.fillStyle = "#66ff66";
+    } else {
+      ctx.globalAlpha = 0.6;
+      ctx.fillStyle = "#ff6666";
+    }
+    for(let r=0;r<holding.h;r++){
+      for(let c=0;c<holding.w;c++){
+        if(holding.shape[r][c]){
+          ctx.fillRect(px + c*CELL, py + r*CELL, CELL-2, CELL-2);
+        }
+      }
+    }
+    ctx.globalAlpha = 1.0;
+  }
+
+  requestAnimationFrame(loop)(loop);
+}
+
+// เริ่มเกม
+generatePieces();
+loop();
+</script>
+</body>
+</html>
